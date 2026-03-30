@@ -3,14 +3,11 @@ import pandas as pd
 import sqlite3
 import re
 from datetime import datetime
-from openai import OpenAI
 
 # -------------------------
 # CONFIG
 # -------------------------
 st.set_page_config(page_title="Aevum Lifespan AI", layout="centered")
-
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # -------------------------
 # DATABASE
@@ -42,7 +39,7 @@ CREATE TABLE IF NOT EXISTS biomarkers (
 conn.commit()
 
 # -------------------------
-# SIDEBAR LOGIN
+# LOGIN
 # -------------------------
 st.sidebar.title("Aevum Lifespan AI")
 
@@ -54,7 +51,7 @@ if username:
     st.sidebar.success(f"Logged in as {username}")
 
 # -------------------------
-# DEMO DATA (fallback)
+# DEMO DATA
 # -------------------------
 DEMO_DATA = {
     "cholesterol": 210,
@@ -66,7 +63,7 @@ DEMO_DATA = {
 }
 
 # -------------------------
-# BIOMARKER EXTRACTION
+# EXTRACT BIOMARKERS
 # -------------------------
 def extract(text):
     def find(p):
@@ -83,7 +80,7 @@ def extract(text):
     }
 
 # -------------------------
-# FETCH USER DATA
+# FETCH DATA
 # -------------------------
 def get_data():
     if username:
@@ -95,12 +92,117 @@ def get_data():
 df = get_data()
 
 # -------------------------
+# SELECT DATA
+# -------------------------
+if df.empty:
+    current = DEMO_DATA
+else:
+    latest = df.iloc[-1]
+    current = {
+        "cholesterol": latest["cholesterol"],
+        "ldl": latest["ldl"],
+        "hdl": latest["hdl"],
+        "triglycerides": latest["triglycerides"],
+        "vitamin_d": latest["vitamin_d"],
+        "glucose": latest["glucose"]
+    }
+
+# -------------------------
+# RULE-BASED ENGINE (NO AI NEEDED)
+# -------------------------
+def generate_insights(data):
+    summary = []
+    risks = []
+    recommendations = []
+
+    # Cholesterol
+    if data["cholesterol"] and data["cholesterol"] > 200:
+        summary.append("Your cholesterol levels are elevated.")
+        risks.append("Higher risk of cardiovascular disease.")
+        recommendations.append("Reduce saturated fat intake and increase exercise.")
+
+    # LDL
+    if data["ldl"] and data["ldl"] > 130:
+        risks.append("Elevated LDL increases heart disease risk.")
+        recommendations.append("Increase fiber intake and reduce processed foods.")
+
+    # HDL
+    if data["hdl"] and data["hdl"] < 50:
+        summary.append("HDL (good cholesterol) is on the lower side.")
+        recommendations.append("Increase physical activity to improve HDL.")
+
+    # Triglycerides
+    if data["triglycerides"] and data["triglycerides"] > 150:
+        risks.append("High triglycerides may impact metabolic health.")
+        recommendations.append("Reduce sugar and refined carbs.")
+
+    # Vitamin D
+    if data["vitamin_d"] and data["vitamin_d"] < 30:
+        summary.append("Vitamin D levels are low.")
+        recommendations.append("Increase sunlight exposure and consider supplements.")
+
+    # Glucose
+    if data["glucose"] and data["glucose"] > 100:
+        risks.append("Elevated glucose indicates risk of prediabetes.")
+        recommendations.append("Improve diet and increase activity levels.")
+
+    # Default fallback
+    if not summary:
+        summary.append("Your health markers are within a stable range.")
+        recommendations.append("Maintain current lifestyle habits.")
+
+    return summary, risks, recommendations
+
+summary, risks, actions = generate_insights(current)
+
+# -------------------------
 # TABS
 # -------------------------
 tabs = st.tabs(["Summary", "Trends", "Recommendations", "Risks", "Uploads"])
 
 # -------------------------
-# UPLOAD TAB
+# SUMMARY
+# -------------------------
+with tabs[0]:
+    st.header("Your Health Summary")
+
+    st.metric("Health Score", "78", "+5")
+
+    st.subheader("Key Insights")
+    for s in summary:
+        st.write(s)
+
+# -------------------------
+# TRENDS
+# -------------------------
+with tabs[1]:
+    st.header("Health Trends")
+
+    if not df.empty:
+        st.line_chart(df[["cholesterol", "ldl", "glucose"]])
+    else:
+        st.info("Upload reports to see trends")
+
+# -------------------------
+# RECOMMENDATIONS
+# -------------------------
+with tabs[2]:
+    st.header("Recommendations")
+
+    for a in actions:
+        st.success(a)
+
+# -------------------------
+# RISKS
+# -------------------------
+with tabs[3]:
+    st.header("Risk Signals")
+
+    for r in risks:
+        st.warning(r)
+
+# -------------------------
+# UPLOAD
 # -------------------------
 with tabs[4]:
     st.header("Upload Health Report")
@@ -128,119 +230,3 @@ with tabs[4]:
 
         st.success("Data saved!")
         st.write(data)
-
-# -------------------------
-# SELECT CURRENT DATA
-# -------------------------
-if df.empty:
-    current = DEMO_DATA
-else:
-    latest = df.iloc[-1]
-    current = {
-        "cholesterol": latest["cholesterol"],
-        "ldl": latest["ldl"],
-        "hdl": latest["hdl"],
-        "triglycerides": latest["triglycerides"],
-        "vitamin_d": latest["vitamin_d"],
-        "glucose": latest["glucose"]
-    }
-
-# -------------------------
-# AI ENGINE (NEW SDK)
-# -------------------------
-def generate_ai(data):
-    prompt = f"""
-    You are a preventive healthcare AI.
-
-    Biomarkers:
-    Cholesterol {data['cholesterol']}
-    LDL {data['ldl']}
-    HDL {data['hdl']}
-    Triglycerides {data['triglycerides']}
-    Vitamin D {data['vitamin_d']}
-    Glucose {data['glucose']}
-
-    Provide:
-    1. Summary
-    2. Risks
-    3. Recommendations
-    """
-
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[
-                {"role": "system", "content": "You are a medical AI."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-
-        return response.choices[0].message.content
-
-    except Exception as e:
-        return f"AI error: {str(e)}"
-
-ai_output = generate_ai(current)
-
-# -------------------------
-# PARSE AI OUTPUT
-# -------------------------
-def parse(text):
-    summary, risks, actions = [], [], []
-
-    for line in text.split("\n"):
-        l = line.lower()
-        if "risk" in l:
-            risks.append(line)
-        elif "recommend" in l:
-            actions.append(line)
-        else:
-            summary.append(line)
-
-    return summary, risks, actions
-
-summary, risks, actions = parse(ai_output)
-
-# -------------------------
-# SUMMARY TAB
-# -------------------------
-with tabs[0]:
-    st.header("Your Health Summary")
-
-    st.metric("Health Score", "78", "+5")
-
-    st.subheader("Key Insights")
-    for i in summary:
-        if i.strip():
-            st.write(i)
-
-# -------------------------
-# TRENDS TAB
-# -------------------------
-with tabs[1]:
-    st.header("Health Trends")
-
-    if not df.empty:
-        st.line_chart(df[["cholesterol", "ldl", "glucose"]])
-    else:
-        st.info("Upload reports to see trends")
-
-# -------------------------
-# RECOMMENDATIONS TAB
-# -------------------------
-with tabs[2]:
-    st.header("Recommendations")
-
-    for a in actions:
-        if a.strip():
-            st.success(a)
-
-# -------------------------
-# RISKS TAB
-# -------------------------
-with tabs[3]:
-    st.header("Risk Signals")
-
-    for r in risks:
-        if r.strip():
-            st.warning(r)
