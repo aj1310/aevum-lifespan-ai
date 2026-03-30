@@ -65,13 +65,6 @@ Coming soon:
 
 ---
 
-## 👤 Founder
-
-Abhishek Joshi  
-Ex-Amazon Fresh | 15+ years in scaling digital businesses
-
----
-
 ## 📬 Contact
 
 https://www.linkedin.com/in/abhishekjoshi13/
