@@ -39,6 +39,7 @@ conn.commit()
 # SIDEBAR
 # -------------------------
 st.sidebar.title("Aevum Lifespan AI")
+
 username = st.sidebar.text_input("Enter Username")
 
 if username:
@@ -59,7 +60,16 @@ DEMO_DATA = {
 }
 
 # -------------------------
-# EXTRACT
+# WEARABLE INPUT (SIMULATED)
+# -------------------------
+st.sidebar.subheader("Wearable Data")
+
+heart_rate = st.sidebar.slider("Resting Heart Rate", 50, 100, 72)
+hrv = st.sidebar.slider("HRV", 20, 100, 55)
+sleep = st.sidebar.slider("Sleep (hrs)", 4.0, 9.0, 6.5)
+
+# -------------------------
+# EXTRACT BIOMARKERS
 # -------------------------
 def extract(text):
     def find(p):
@@ -94,37 +104,65 @@ if df.empty:
     current = DEMO_DATA
     st.info("Showing demo data. Upload your report for personalized insights.")
 else:
-    latest = df.iloc[-1]
-    current = latest
+    current = df.iloc[-1]
 
 # -------------------------
-# SMART INSIGHTS ENGINE
+# WEARABLE INTELLIGENCE
+# -------------------------
+def wearable_insights(hr, hrv, sleep):
+    insights = []
+    score = 0
+
+    # Recovery logic
+    if hrv > 60 and sleep > 7:
+        insights.append("Your recovery is strong. Body is well rested.")
+        score += 2
+    elif hrv < 40 or sleep < 6:
+        insights.append("Recovery is low. Body may be under stress.")
+        score -= 2
+
+    # Stress logic
+    if hr > 80:
+        insights.append("Elevated resting heart rate indicates stress load.")
+
+    # Sleep logic
+    if sleep < 6:
+        insights.append("Sleep duration is insufficient for optimal recovery.")
+
+    # Score mapping
+    if score >= 2:
+        readiness = "High"
+    elif score <= -1:
+        readiness = "Low"
+    else:
+        readiness = "Moderate"
+
+    return insights, readiness
+
+wearable_data, readiness = wearable_insights(heart_rate, hrv, sleep)
+
+# -------------------------
+# HEALTH INSIGHTS
 # -------------------------
 def generate_insights(data):
     primary = ""
     secondary = []
     actions = []
 
-    # Primary driver
     if data["cholesterol"] > 200:
-        primary = "Elevated cholesterol is your biggest health lever right now."
+        primary = "Elevated cholesterol is your biggest health lever."
 
-    # Secondary signals
     if data["hdl"] < 50:
-        secondary.append("Low HDL reduces protective cardiovascular effect.")
+        secondary.append("Low HDL reduces cardiovascular protection.")
 
     if data["vitamin_d"] < 30:
-        secondary.append("Vitamin D deficiency may impact immunity and energy.")
+        secondary.append("Vitamin D deficiency detected.")
 
-    if data["triglycerides"] > 150:
-        secondary.append("Triglycerides indicate metabolic imbalance.")
-
-    # Actions
     actions = [
-        "Increase physical activity (150 min/week)",
-        "Reduce processed carbs and saturated fats",
-        "Get 15–20 mins sunlight daily",
-        "Improve sleep consistency"
+        "Exercise 150 mins/week",
+        "Improve diet quality",
+        "Get sunlight exposure",
+        "Maintain sleep consistency"
     ]
 
     return primary, secondary, actions
@@ -137,32 +175,26 @@ primary, secondary, actions = generate_insights(current)
 tabs = st.tabs(["Summary", "Trends", "Recommendations", "Risks", "Uploads"])
 
 # -------------------------
-# SUMMARY (PREMIUM)
+# SUMMARY
 # -------------------------
 with tabs[0]:
     st.title("Your Health Summary")
 
     st.metric("Health Score", "78", "+5")
+    st.metric("Recovery Score", readiness)
 
     st.success("You're improving. Stay consistent 🚀")
 
     st.subheader("🧠 Primary Insight")
     st.markdown(f"### {primary}")
 
+    st.subheader("⚡ Wearable Intelligence")
+    for w in wearable_data:
+        st.write(f"- {w}")
+
     st.subheader("📊 Key Signals")
     for s in secondary:
-        st.markdown(f"- {s}")
-
-    st.subheader("📌 Current Biomarkers")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.metric("Cholesterol", current["cholesterol"])
-        st.metric("HDL", current["hdl"])
-
-    with col2:
-        st.metric("LDL", current["ldl"])
-        st.metric("Glucose", current["glucose"])
+        st.write(f"- {s}")
 
 # -------------------------
 # TRENDS
@@ -194,7 +226,7 @@ with tabs[3]:
         st.warning("Cardiovascular risk elevated")
 
     if current["glucose"] > 100:
-        st.warning("Risk of prediabetes")
+        st.warning("Prediabetes risk")
 
 # -------------------------
 # UPLOAD
