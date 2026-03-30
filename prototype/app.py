@@ -3,14 +3,14 @@ import pandas as pd
 import sqlite3
 import re
 from datetime import datetime
-import openai
+from openai import OpenAI
 
 # -------------------------
 # CONFIG
 # -------------------------
 st.set_page_config(page_title="Aevum Lifespan AI", layout="centered")
 
-openai.api_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # -------------------------
 # DATABASE
@@ -146,7 +146,7 @@ else:
     }
 
 # -------------------------
-# AI ENGINE (FIXED)
+# AI ENGINE (NEW SDK)
 # -------------------------
 def generate_ai(data):
     prompt = f"""
@@ -167,15 +167,15 @@ def generate_ai(data):
     """
 
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": "You are a medical AI."},
                 {"role": "user", "content": prompt}
             ]
         )
 
-        return response["choices"][0]["message"]["content"]
+        return response.choices[0].message.content
 
     except Exception as e:
         return f"AI error: {str(e)}"
