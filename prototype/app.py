@@ -13,6 +13,11 @@ st.sidebar.header("User Profile")
 age = st.sidebar.slider("Age", 25, 60, 38)
 activity = st.sidebar.selectbox("Activity Level", ["Low", "Moderate", "High"])
 
+demo = st.sidebar.checkbox("Enable Demo Mode", value=True)
+
+if demo:
+    st.success("Demo Mode Active: Showing sample insights")
+
 # Upload report
 st.header("Upload Medical Report")
 file = st.file_uploader("Upload your report (PDF/Image)")
@@ -36,10 +41,27 @@ data = pd.DataFrame({
 
 st.table(data)
 
+import numpy as np
+
+st.header("Health Trends")
+
+days = list(range(1, 8))
+hrv = [48, 50, 52, 51, 53, 54, 55]
+
+st.line_chart({"HRV Trend": hrv})
+
 # Health score
 st.header("Health Score")
 st.metric(label="Overall Score", value="78", delta="+5")
 
-# Insight
+st.caption("Based on sleep quality, HRV trends, and activity levels")
+
 st.header("AI Insight")
-st.info("Improved sleep consistency has positively impacted your HRV.")
+
+st.info("""
+Your improving sleep consistency (+18% over the last 2 weeks) has positively impacted your HRV, 
+indicating better recovery and reduced physiological stress.
+
+However, your resting heart rate remains slightly elevated, suggesting an opportunity 
+to improve cardiovascular fitness through consistent moderate-intensity activity.
+""")
