@@ -3,14 +3,14 @@ import pandas as pd
 import sqlite3
 import re
 from datetime import datetime
-from openai import OpenAI
+import openai
 
 # -------------------------
 # CONFIG
 # -------------------------
 st.set_page_config(page_title="Aevum Lifespan AI", layout="centered")
 
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+openai.api_key = st.secrets["OPENAI_API_KEY"]
 
 # -------------------------
 # DATABASE
@@ -54,7 +54,7 @@ if username:
     st.sidebar.success(f"Logged in as {username}")
 
 # -------------------------
-# DEMO FALLBACK
+# DEMO DATA (fallback)
 # -------------------------
 DEMO_DATA = {
     "cholesterol": 210,
@@ -66,7 +66,7 @@ DEMO_DATA = {
 }
 
 # -------------------------
-# EXTRACT BIOMARKERS
+# BIOMARKER EXTRACTION
 # -------------------------
 def extract(text):
     def find(p):
@@ -83,14 +83,13 @@ def extract(text):
     }
 
 # -------------------------
-# FETCH DATA
+# FETCH USER DATA
 # -------------------------
 def get_data():
     if username:
-        df = pd.read_sql_query(f"""
+        return pd.read_sql_query(f"""
         SELECT * FROM biomarkers WHERE username='{username}'
         """, conn)
-        return df
     return pd.DataFrame()
 
 df = get_data()
@@ -101,7 +100,7 @@ df = get_data()
 tabs = st.tabs(["Summary", "Trends", "Recommendations", "Risks", "Uploads"])
 
 # -------------------------
-# UPLOAD
+# UPLOAD TAB
 # -------------------------
 with tabs[4]:
     st.header("Upload Health Report")
@@ -131,7 +130,7 @@ with tabs[4]:
         st.write(data)
 
 # -------------------------
-# SELECT DATA (IMPORTANT FIX)
+# SELECT CURRENT DATA
 # -------------------------
 if df.empty:
     current = DEMO_DATA
@@ -147,10 +146,12 @@ else:
     }
 
 # -------------------------
-# AI ENGINE
+# AI ENGINE (FIXED)
 # -------------------------
 def generate_ai(data):
     prompt = f"""
+    You are a preventive healthcare AI.
+
     Biomarkers:
     Cholesterol {data['cholesterol']}
     LDL {data['ldl']}
@@ -166,30 +167,37 @@ def generate_ai(data):
     """
 
     try:
-        res = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}]
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a medical AI."},
+                {"role": "user", "content": prompt}
+            ]
         )
-        return res.choices[0].message.content
-    except:
-        return "AI unavailable. Showing demo insights."
+
+        return response["choices"][0]["message"]["content"]
+
+    except Exception as e:
+        return f"AI error: {str(e)}"
 
 ai_output = generate_ai(current)
 
 # -------------------------
-# PARSE
+# PARSE AI OUTPUT
 # -------------------------
 def parse(text):
-    s, r, a = [], [], []
+    summary, risks, actions = [], [], []
+
     for line in text.split("\n"):
         l = line.lower()
         if "risk" in l:
-            r.append(line)
+            risks.append(line)
         elif "recommend" in l:
-            a.append(line)
+            actions.append(line)
         else:
-            s.append(line)
-    return s, r, a
+            summary.append(line)
+
+    return summary, risks, actions
 
 summary, risks, actions = parse(ai_output)
 
@@ -218,7 +226,7 @@ with tabs[1]:
         st.info("Upload reports to see trends")
 
 # -------------------------
-# RECOMMENDATIONS
+# RECOMMENDATIONS TAB
 # -------------------------
 with tabs[2]:
     st.header("Recommendations")
@@ -228,10 +236,10 @@ with tabs[2]:
             st.success(a)
 
 # -------------------------
-# RISKS
+# RISKS TAB
 # -------------------------
 with tabs[3]:
-    st.header("Risks")
+    st.header("Risk Signals")
 
     for r in risks:
         if r.strip():
