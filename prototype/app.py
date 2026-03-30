@@ -1,233 +1,190 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import sqlite3
+import re
+from datetime import datetime
 from openai import OpenAI
 
-# Optional PDF parsing (safe import)
-try:
-    import PyPDF2
-    PDF_ENABLED = True
-except:
-    PDF_ENABLED = False
-
-# -------------------------
-# INIT
-# -------------------------
 st.set_page_config(page_title="Aevum Lifespan AI", layout="wide")
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # -------------------------
-# SESSION STATE
+# DATABASE
 # -------------------------
-if "report_text" not in st.session_state:
-    st.session_state.report_text = ""
+conn = sqlite3.connect("aevum.db", check_same_thread=False)
+c = conn.cursor()
 
-if "ai_output" not in st.session_state:
-    st.session_state.ai_output = ""
+c.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    username TEXT PRIMARY KEY,
+    created_at TEXT
+)
+""")
+
+c.execute("""
+CREATE TABLE IF NOT EXISTS biomarkers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT,
+    cholesterol REAL,
+    ldl REAL,
+    hdl REAL,
+    triglycerides REAL,
+    vitamin_d REAL,
+    glucose REAL,
+    created_at TEXT
+)
+""")
+
+conn.commit()
 
 # -------------------------
-# HEADER
+# LOGIN
 # -------------------------
-st.title("Aevum Lifespan AI")
-st.caption("The intelligence layer for human longevity")
+st.sidebar.header("Login")
+
+username = st.sidebar.text_input("Username")
+
+if username:
+    c.execute("INSERT OR IGNORE INTO users VALUES (?, ?)", (username, str(datetime.now())))
+    conn.commit()
+    st.sidebar.success(f"Logged in: {username}")
 
 # -------------------------
-# SIDEBAR (INPUTS)
+# EXTRACT BIOMARKERS
 # -------------------------
-st.sidebar.header("Your Profile")
+def extract(text):
+    def find(p):
+        m = re.search(p, text, re.I)
+        return float(m.group(1)) if m else None
 
-age = st.sidebar.slider("Age", 25, 65, 38)
-activity = st.sidebar.selectbox("Activity Level", ["Low", "Moderate", "High"])
-
-st.sidebar.subheader("Lifestyle")
-sleep = st.sidebar.slider("Sleep (hrs)", 4.0, 9.0, 6.5)
-workouts = st.sidebar.slider("Workouts/week", 0, 7, 3)
-diet = st.sidebar.selectbox("Diet Quality", ["Poor", "Average", "Good"])
-
-demo = st.sidebar.checkbox("Demo Mode", value=True)
+    return {
+        "cholesterol": find(r"cholesterol.*?(\d+)"),
+        "ldl": find(r"ldl.*?(\d+)"),
+        "hdl": find(r"hdl.*?(\d+)"),
+        "triglycerides": find(r"triglycerides.*?(\d+)"),
+        "vitamin_d": find(r"vitamin\s*d.*?(\d+)"),
+        "glucose": find(r"glucose.*?(\d+)")
+    }
 
 # -------------------------
 # TABS
 # -------------------------
-tab_summary, tab_reco, tab_risk, tab_integrations, tab_uploads = st.tabs([
-    "📊 Your Health Summary",
-    "💡 Recommendations",
-    "⚠️ Risks",
-    "🔗 Integrations",
-    "📁 Uploads"
-])
+tabs = st.tabs(["Summary", "Trends", "Recommendations", "Risks", "Uploads"])
 
 # -------------------------
-# PDF PARSER
+# UPLOAD
 # -------------------------
-def extract_pdf(file):
-    if not PDF_ENABLED:
-        return "PDF parsing not available"
-    reader = PyPDF2.PdfReader(file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text()
-    return text
+with tabs[4]:
+    st.header("Upload Report")
 
-# -------------------------
-# UPLOADS TAB
-# -------------------------
-with tab_uploads:
-    st.header("Upload Medical Reports")
+    text = st.text_area("Paste report text")
 
-    uploaded_file = st.file_uploader("Upload PDF", type=["pdf"])
+    if st.button("Extract & Save"):
+        data = extract(text)
 
-    if uploaded_file:
-        st.session_state.report_text = extract_pdf(uploaded_file)
-        st.success("Report uploaded successfully")
+        if username:
+            c.execute("""
+            INSERT INTO biomarkers (username, cholesterol, ldl, hdl, triglycerides, vitamin_d, glucose, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                username,
+                data["cholesterol"],
+                data["ldl"],
+                data["hdl"],
+                data["triglycerides"],
+                data["vitamin_d"],
+                data["glucose"],
+                str(datetime.now())
+            ))
+            conn.commit()
 
-    elif demo:
-        st.session_state.report_text = """
-        Cholesterol: High
-        Vitamin D: Low
-        Triglycerides: Slightly elevated
-        """
-        st.info("Using demo medical report")
+        st.success("Saved")
+        st.write(data)
 
 # -------------------------
-# INTEGRATIONS TAB
+# FETCH DATA
 # -------------------------
-with tab_integrations:
-    st.header("Connected Data Sources")
+def get_data():
+    if username:
+        return pd.read_sql_query(f"""
+        SELECT * FROM biomarkers WHERE username='{username}'
+        """, conn)
+    return pd.DataFrame()
 
-    st.subheader("Wearables")
-    st.success("Apple Watch (Simulated Connected)")
+df = get_data()
 
-    wearable_df = pd.DataFrame({
-        "Metric": ["Heart Rate", "HRV", "Sleep"],
-        "Value": [72, 55, sleep]
-    })
+# -------------------------
+# TRENDS
+# -------------------------
+with tabs[1]:
+    st.header("Health Trends")
 
-    st.dataframe(wearable_df, use_container_width=True)
-
-    st.subheader("Lifestyle Data")
-    st.write(f"Sleep: {sleep} hrs")
-    st.write(f"Workouts/week: {workouts}")
-    st.write(f"Diet Quality: {diet}")
+    if not df.empty:
+        st.line_chart(df[["cholesterol", "ldl", "glucose"]])
 
 # -------------------------
 # AI ENGINE
 # -------------------------
-def generate_ai():
+def ai(data):
+    latest = data.iloc[-1]
+
     prompt = f"""
-    You are a preventive healthcare AI focused on longevity.
+    Biomarkers:
+    Cholesterol {latest['cholesterol']}
+    LDL {latest['ldl']}
+    HDL {latest['hdl']}
+    Glucose {latest['glucose']}
 
-    User:
-    Age: {age}
-    Activity: {activity}
-    Sleep: {sleep}
-    Workouts: {workouts}
-    Diet: {diet}
-
-    Wearables:
-    HR: 72
-    HRV: 55
-
-    Medical Report:
-    {st.session_state.report_text}
-
-    Provide structured output:
-
-    1. Summary
-    2. Risks
-    3. Recommendations
-
-    Use bullet points.
+    Give:
+    Summary, Risks, Recommendations
     """
 
-    response = client.chat.completions.create(
+    res = client.chat.completions.create(
         model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": "You are a medical AI."},
-            {"role": "user", "content": prompt}
-        ]
+        messages=[{"role": "user", "content": prompt}]
     )
 
-    return response.choices[0].message.content
+    return res.choices[0].message.content
 
-# Run AI only once per load
-if st.session_state.report_text and not st.session_state.ai_output:
-    try:
-        st.session_state.ai_output = generate_ai()
-    except:
-        st.session_state.ai_output = "AI temporarily unavailable"
+output = ai(df) if not df.empty else ""
 
 # -------------------------
-# PARSE OUTPUT
+# PARSE
 # -------------------------
-def parse_ai(text):
-    lines = text.split("\n")
-    summary, risks, recs = [], [], []
-
-    for line in lines:
-        l = line.lower()
-        if "risk" in l:
-            risks.append(line)
-        elif "recommend" in l or "should" in l:
-            recs.append(line)
+def parse(text):
+    s, r, a = [], [], []
+    for line in text.split("\n"):
+        if "risk" in line.lower():
+            r.append(line)
+        elif "recommend" in line.lower():
+            a.append(line)
         else:
-            summary.append(line)
+            s.append(line)
+    return s, r, a
 
-    return summary, risks, recs
-
-summary, risks, recs = parse_ai(st.session_state.ai_output)
-
-# -------------------------
-# SUMMARY TAB
-# -------------------------
-with tab_summary:
-    st.header("Your Health Summary")
-
-    st.metric("Health Score", "78", "+5")
-
-    st.markdown("""
-    **Longevity Status:**  
-    You are in a moderate optimization zone. Improvements in sleep and activity can significantly improve outcomes.
-    """)
-
-    st.subheader("Key Insights")
-    for s in summary:
-        if s.strip():
-            st.markdown(f"- {s}")
-
-    st.subheader("Health Trends")
-
-    hrv = [48, 50, 52, 51, 53, 54, 55]
-    sleep_trend = [6.0, 6.2, 6.5, 6.3, 6.6, 6.8, sleep]
-
-    trend_df = pd.DataFrame({
-        "HRV": hrv,
-        "Sleep": sleep_trend
-    })
-
-    st.line_chart(trend_df)
+summary, risks, actions = parse(output)
 
 # -------------------------
-# RECOMMENDATIONS TAB
+# SUMMARY
 # -------------------------
-with tab_reco:
+with tabs[0]:
+    st.header("Summary")
+    for i in summary:
+        st.write(i)
+
+# -------------------------
+# RECOMMENDATIONS
+# -------------------------
+with tabs[2]:
     st.header("Recommendations")
-
-    for r in recs:
-        if r.strip():
-            st.success(r)
-
-    st.info("Follow these consistently for 4–6 weeks for measurable improvement")
+    for a in actions:
+        st.success(a)
 
 # -------------------------
-# RISKS TAB
+# RISKS
 # -------------------------
-with tab_risk:
-    st.header("Risk Signals")
-
+with tabs[3]:
+    st.header("Risks")
     for r in risks:
-        if r.strip():
-            st.warning(r)
-
-    st.warning("Baseline: Elevated cholesterol + low activity increases cardiovascular risk")
+        st.warning(r)
