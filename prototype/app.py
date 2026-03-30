@@ -2,170 +2,185 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from openai import OpenAI
+import PyPDF2
 
-# Initialize OpenAI client
+# Initialize OpenAI
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
-# Page config
 st.set_page_config(page_title="Aevum Lifespan AI", layout="wide")
 
-# Title section
+# -------------------------
+# HEADER
+# -------------------------
 st.title("Aevum Lifespan AI")
 st.caption("The intelligence layer for human longevity")
-st.markdown("### Your health, decoded across biology, behavior, and time.")
+st.markdown("### Decode your health across biology, behavior, and time")
 
-# Sidebar (User Profile)
+# -------------------------
+# SIDEBAR
+# -------------------------
 st.sidebar.header("User Profile")
 
 age = st.sidebar.slider("Age", 25, 60, 38)
 activity = st.sidebar.selectbox("Activity Level", ["Low", "Moderate", "High"])
 
-# Demo mode toggle
+# Lifestyle inputs
+st.sidebar.subheader("Lifestyle Inputs")
+sleep_hours = st.sidebar.slider("Avg Sleep (hrs)", 4.0, 9.0, 6.5)
+workouts = st.sidebar.slider("Workouts / week", 0, 7, 3)
+diet_quality = st.sidebar.selectbox("Diet Quality", ["Poor", "Average", "Good"])
+
+# Demo mode
 demo = st.sidebar.checkbox("Enable Demo Mode", value=True)
 
-if demo:
-    st.sidebar.success("Demo Mode Active")
+# -------------------------
+# PDF PARSER
+# -------------------------
+def extract_text_from_pdf(file):
+    reader = PyPDF2.PdfReader(file)
+    text = ""
+    for page in reader.pages:
+        text += page.extract_text()
+    return text
 
-# Upload section
-st.header("Upload Medical Report")
-file = st.file_uploader("Upload your report (PDF/Image)")
+# -------------------------
+# REPORT UPLOAD
+# -------------------------
+st.header("Medical Report")
 
-if file or demo:
-    st.success("Report processed successfully")
+file = st.file_uploader("Upload PDF report", type=["pdf"])
 
-    st.subheader("AI Summary")
-    st.write("""
-    - Cholesterol slightly elevated  
-    - Vitamin D deficiency  
-    - Recommend increased activity and sunlight exposure  
-    """)
+report_text = ""
 
-# Wearable Data
-st.header("Wearable Data (Simulated)")
+if file:
+    report_text = extract_text_from_pdf(file)
+    st.success("Report uploaded and processed")
+
+elif demo:
+    report_text = "Sample report: Cholesterol elevated, Vitamin D low"
+    st.info("Demo mode active – using sample report")
+
+# -------------------------
+# WEARABLE DATA
+# -------------------------
+st.header("Wearable Signals")
 
 data = pd.DataFrame({
     "Metric": ["Heart Rate", "HRV", "Sleep"],
-    "Value": [72, 55, 6.5]
+    "Value": [72, 55, sleep_hours]
 })
 
-st.table(data)
+st.dataframe(data, use_container_width=True)
 
-# Health Score
+# -------------------------
+# HEALTH SCORE
+# -------------------------
 st.header("Health Score")
-st.metric(label="Overall Score", value="78", delta="+5")
-st.caption("Based on sleep quality, HRV trends, and activity levels")
 
-# Longevity narrative
+score = 78
+st.metric("Overall Score", score, "+5")
+
 st.markdown("""
 **Longevity Interpretation:**  
-You are currently in a *moderate optimization zone*. Improvements in sleep consistency and cardiovascular fitness 
-can significantly enhance long-term health outcomes.
+You are in a moderate optimization zone. Improvements in sleep and cardiovascular fitness 
+can significantly enhance long-term outcomes.
 """)
 
-# Trends
-st.header("Health Trends")
+# -------------------------
+# TRENDS
+# -------------------------
+st.header("Trends")
 
 hrv = [48, 50, 52, 51, 53, 54, 55]
-st.line_chart({"HRV Trend": hrv})
+st.line_chart(hrv)
 
-# AI Insight (REAL AI)
-st.header("AI Insight")
+# -------------------------
+# AI ENGINE
+# -------------------------
+st.header("AI Health Intelligence")
 
-if demo:
+if report_text:
     try:
         prompt = f"""
-        You are a medical AI assistant focused on preventive health and longevity.
+You are an expert preventive healthcare AI.
 
-        User profile:
-        Age: {age}
-        Activity level: {activity}
+User:
+Age: {age}
+Activity: {activity}
+Sleep: {sleep_hours}
+Workouts: {workouts}
+Diet: {diet_quality}
 
-        Wearable data:
-        - Heart rate: 72
-        - HRV: 55
-        - Sleep: 6.5 hours
+Wearables:
+HR: 72
+HRV: 55
 
-        Provide output in 3 sections:
-        1. Key Insights
-        2. Risk Indicators
-        3. Actionable Recommendations
+Medical Report:
+{report_text}
 
-        Keep it concise and structured using bullet points.
-        """
+Provide:
+
+1. Key Insights
+2. Risk Signals
+3. Action Plan
+
+Keep it concise, structured, and practical.
+"""
 
         response = client.chat.completions.create(
             model="gpt-4.1-mini",
             messages=[
-                {"role": "system", "content": "You are a health intelligence AI."},
+                {"role": "system", "content": "You are a longevity-focused medical AI."},
                 {"role": "user", "content": prompt}
             ]
         )
 
-        ai_output = response.choices[0].message.content
+        output = response.choices[0].message.content
 
-        # Parse response into sections
-        sections = ai_output.split("\n")
+        # Simple parsing
+        lines = output.split("\n")
 
-        insights = []
-        risks = []
-        actions = []
+        insights, risks, actions = [], [], []
 
-        for line in sections:
-            line_lower = line.lower()
-
-            if "risk" in line_lower:
+        for line in lines:
+            l = line.lower()
+            if "risk" in l:
                 risks.append(line)
-            elif "recommend" in line_lower or "should" in line_lower:
+            elif "recommend" in l or "should" in l:
                 actions.append(line)
             else:
                 insights.append(line)
 
-        # Display sections
-        st.subheader("🧠 Key Insights")
+        # Display
+        st.subheader("🧠 Insights")
         for i in insights:
             if i.strip():
                 st.markdown(f"- {i}")
 
-        st.subheader("⚠️ Risk Signals")
+        st.subheader("⚠️ Risks")
         for r in risks:
             if r.strip():
                 st.warning(r)
 
-        st.subheader("✅ Action Plan")
+        st.subheader("✅ Actions")
         for a in actions:
             if a.strip():
                 st.success(a)
 
-    except Exception as e:
-        st.error("AI service unavailable. Please check API key or try again.")
-        st.info("""
-        Sample Insight:
-        Your improving sleep consistency is positively impacting HRV, indicating better recovery.
-        Focus on cardiovascular activity to further improve heart health.
-        """)
+    except:
+        st.error("AI temporarily unavailable")
 
 else:
-    st.info("Upload a report to generate insights.")
+    st.info("Upload a report to generate insights")
 
-# Static Risk Signals (backup framing)
-st.header("Baseline Risk Signals")
-
-st.warning("""
-Elevated LDL cholesterol combined with low activity levels may increase cardiovascular risk over time.
-
-Suggested Action:
-- 150 mins/week moderate cardio
-- Reduce processed fats
-""")
-
-# Future vision
+# -------------------------
+# FUTURE
+# -------------------------
 st.header("What Aevum will do next")
 
 st.markdown("""
-In future versions, Aevum will:
-
-- Continuously track your health across time  
-- Predict potential risks before they emerge  
-- Recommend personalized lifestyle interventions  
-- Enable doctor collaboration with AI-assisted summaries  
+- Continuous health tracking  
+- Predictive risk detection  
+- Personalized longevity plans  
+- Doctor collaboration  
 """)
