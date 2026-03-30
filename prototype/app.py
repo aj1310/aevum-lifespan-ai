@@ -55,6 +55,13 @@ st.header("Health Score")
 st.metric(label="Overall Score", value="78", delta="+5")
 st.caption("Based on sleep quality, HRV trends, and activity levels")
 
+# Longevity narrative
+st.markdown("""
+**Longevity Interpretation:**  
+You are currently in a *moderate optimization zone*. Improvements in sleep consistency and cardiovascular fitness 
+can significantly enhance long-term health outcomes.
+""")
+
 # Trends
 st.header("Health Trends")
 
@@ -78,12 +85,12 @@ if demo:
         - HRV: 55
         - Sleep: 6.5 hours
 
-        Provide:
-        1. Key health insights
-        2. Risk indicators
-        3. Actionable recommendations
+        Provide output in 3 sections:
+        1. Key Insights
+        2. Risk Indicators
+        3. Actionable Recommendations
 
-        Keep it concise and structured.
+        Keep it concise and structured using bullet points.
         """
 
         response = client.chat.completions.create(
@@ -95,7 +102,39 @@ if demo:
         )
 
         ai_output = response.choices[0].message.content
-        st.info(ai_output)
+
+        # Parse response into sections
+        sections = ai_output.split("\n")
+
+        insights = []
+        risks = []
+        actions = []
+
+        for line in sections:
+            line_lower = line.lower()
+
+            if "risk" in line_lower:
+                risks.append(line)
+            elif "recommend" in line_lower or "should" in line_lower:
+                actions.append(line)
+            else:
+                insights.append(line)
+
+        # Display sections
+        st.subheader("🧠 Key Insights")
+        for i in insights:
+            if i.strip():
+                st.markdown(f"- {i}")
+
+        st.subheader("⚠️ Risk Signals")
+        for r in risks:
+            if r.strip():
+                st.warning(r)
+
+        st.subheader("✅ Action Plan")
+        for a in actions:
+            if a.strip():
+                st.success(a)
 
     except Exception as e:
         st.error("AI service unavailable. Please check API key or try again.")
@@ -108,8 +147,8 @@ if demo:
 else:
     st.info("Upload a report to generate insights.")
 
-# Risk Signals
-st.header("Risk Signals")
+# Static Risk Signals (backup framing)
+st.header("Baseline Risk Signals")
 
 st.warning("""
 Elevated LDL cholesterol combined with low activity levels may increase cardiovascular risk over time.
@@ -117,4 +156,16 @@ Elevated LDL cholesterol combined with low activity levels may increase cardiova
 Suggested Action:
 - 150 mins/week moderate cardio
 - Reduce processed fats
+""")
+
+# Future vision
+st.header("What Aevum will do next")
+
+st.markdown("""
+In future versions, Aevum will:
+
+- Continuously track your health across time  
+- Predict potential risks before they emerge  
+- Recommend personalized lifestyle interventions  
+- Enable doctor collaboration with AI-assisted summaries  
 """)
