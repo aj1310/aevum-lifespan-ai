@@ -4,9 +4,6 @@ import sqlite3
 import re
 from datetime import datetime
 
-# -------------------------
-# CONFIG
-# -------------------------
 st.set_page_config(page_title="Aevum Lifespan AI", layout="centered")
 
 # -------------------------
@@ -39,10 +36,9 @@ CREATE TABLE IF NOT EXISTS biomarkers (
 conn.commit()
 
 # -------------------------
-# LOGIN
+# SIDEBAR
 # -------------------------
 st.sidebar.title("Aevum Lifespan AI")
-
 username = st.sidebar.text_input("Enter Username")
 
 if username:
@@ -63,7 +59,7 @@ DEMO_DATA = {
 }
 
 # -------------------------
-# EXTRACT BIOMARKERS
+# EXTRACT
 # -------------------------
 def extract(text):
     def find(p):
@@ -92,68 +88,48 @@ def get_data():
 df = get_data()
 
 # -------------------------
-# SELECT DATA
+# CURRENT DATA
 # -------------------------
 if df.empty:
     current = DEMO_DATA
+    st.info("Showing demo data. Upload your report for personalized insights.")
 else:
     latest = df.iloc[-1]
-    current = {
-        "cholesterol": latest["cholesterol"],
-        "ldl": latest["ldl"],
-        "hdl": latest["hdl"],
-        "triglycerides": latest["triglycerides"],
-        "vitamin_d": latest["vitamin_d"],
-        "glucose": latest["glucose"]
-    }
+    current = latest
 
 # -------------------------
-# RULE-BASED ENGINE (NO AI NEEDED)
+# SMART INSIGHTS ENGINE
 # -------------------------
 def generate_insights(data):
-    summary = []
-    risks = []
-    recommendations = []
+    primary = ""
+    secondary = []
+    actions = []
 
-    # Cholesterol
-    if data["cholesterol"] and data["cholesterol"] > 200:
-        summary.append("Your cholesterol levels are elevated.")
-        risks.append("Higher risk of cardiovascular disease.")
-        recommendations.append("Reduce saturated fat intake and increase exercise.")
+    # Primary driver
+    if data["cholesterol"] > 200:
+        primary = "Elevated cholesterol is your biggest health lever right now."
 
-    # LDL
-    if data["ldl"] and data["ldl"] > 130:
-        risks.append("Elevated LDL increases heart disease risk.")
-        recommendations.append("Increase fiber intake and reduce processed foods.")
+    # Secondary signals
+    if data["hdl"] < 50:
+        secondary.append("Low HDL reduces protective cardiovascular effect.")
 
-    # HDL
-    if data["hdl"] and data["hdl"] < 50:
-        summary.append("HDL (good cholesterol) is on the lower side.")
-        recommendations.append("Increase physical activity to improve HDL.")
+    if data["vitamin_d"] < 30:
+        secondary.append("Vitamin D deficiency may impact immunity and energy.")
 
-    # Triglycerides
-    if data["triglycerides"] and data["triglycerides"] > 150:
-        risks.append("High triglycerides may impact metabolic health.")
-        recommendations.append("Reduce sugar and refined carbs.")
+    if data["triglycerides"] > 150:
+        secondary.append("Triglycerides indicate metabolic imbalance.")
 
-    # Vitamin D
-    if data["vitamin_d"] and data["vitamin_d"] < 30:
-        summary.append("Vitamin D levels are low.")
-        recommendations.append("Increase sunlight exposure and consider supplements.")
+    # Actions
+    actions = [
+        "Increase physical activity (150 min/week)",
+        "Reduce processed carbs and saturated fats",
+        "Get 15–20 mins sunlight daily",
+        "Improve sleep consistency"
+    ]
 
-    # Glucose
-    if data["glucose"] and data["glucose"] > 100:
-        risks.append("Elevated glucose indicates risk of prediabetes.")
-        recommendations.append("Improve diet and increase activity levels.")
+    return primary, secondary, actions
 
-    # Default fallback
-    if not summary:
-        summary.append("Your health markers are within a stable range.")
-        recommendations.append("Maintain current lifestyle habits.")
-
-    return summary, risks, recommendations
-
-summary, risks, actions = generate_insights(current)
+primary, secondary, actions = generate_insights(current)
 
 # -------------------------
 # TABS
@@ -161,16 +137,32 @@ summary, risks, actions = generate_insights(current)
 tabs = st.tabs(["Summary", "Trends", "Recommendations", "Risks", "Uploads"])
 
 # -------------------------
-# SUMMARY
+# SUMMARY (PREMIUM)
 # -------------------------
 with tabs[0]:
-    st.header("Your Health Summary")
+    st.title("Your Health Summary")
 
     st.metric("Health Score", "78", "+5")
 
-    st.subheader("Key Insights")
-    for s in summary:
-        st.write(s)
+    st.success("You're improving. Stay consistent 🚀")
+
+    st.subheader("🧠 Primary Insight")
+    st.markdown(f"### {primary}")
+
+    st.subheader("📊 Key Signals")
+    for s in secondary:
+        st.markdown(f"- {s}")
+
+    st.subheader("📌 Current Biomarkers")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Cholesterol", current["cholesterol"])
+        st.metric("HDL", current["hdl"])
+
+    with col2:
+        st.metric("LDL", current["ldl"])
+        st.metric("Glucose", current["glucose"])
 
 # -------------------------
 # TRENDS
@@ -187,7 +179,7 @@ with tabs[1]:
 # RECOMMENDATIONS
 # -------------------------
 with tabs[2]:
-    st.header("Recommendations")
+    st.header("Action Plan")
 
     for a in actions:
         st.success(a)
@@ -198,8 +190,11 @@ with tabs[2]:
 with tabs[3]:
     st.header("Risk Signals")
 
-    for r in risks:
-        st.warning(r)
+    if current["cholesterol"] > 200:
+        st.warning("Cardiovascular risk elevated")
+
+    if current["glucose"] > 100:
+        st.warning("Risk of prediabetes")
 
 # -------------------------
 # UPLOAD
@@ -207,7 +202,7 @@ with tabs[3]:
 with tabs[4]:
     st.header("Upload Health Report")
 
-    text = st.text_area("Paste your report text")
+    text = st.text_area("Paste report text")
 
     if st.button("Extract & Save"):
         data = extract(text)
