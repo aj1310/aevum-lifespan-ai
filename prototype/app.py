@@ -1,6 +1,10 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+from openai import OpenAI
+
+# Initialize OpenAI client
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # Page config
 st.set_page_config(page_title="Aevum Lifespan AI", layout="wide")
@@ -54,21 +58,55 @@ st.caption("Based on sleep quality, HRV trends, and activity levels")
 # Trends
 st.header("Health Trends")
 
-days = list(range(1, 8))
 hrv = [48, 50, 52, 51, 53, 54, 55]
-
 st.line_chart({"HRV Trend": hrv})
 
-# AI Insight
+# AI Insight (REAL AI)
 st.header("AI Insight")
 
-st.info("""
-Your improving sleep consistency (+18% over the last 2 weeks) has positively impacted your HRV, 
-indicating better recovery and reduced physiological stress.
+if demo:
+    try:
+        prompt = f"""
+        You are a medical AI assistant focused on preventive health and longevity.
 
-However, your resting heart rate remains slightly elevated, suggesting an opportunity 
-to improve cardiovascular fitness through consistent moderate-intensity activity.
-""")
+        User profile:
+        Age: {age}
+        Activity level: {activity}
+
+        Wearable data:
+        - Heart rate: 72
+        - HRV: 55
+        - Sleep: 6.5 hours
+
+        Provide:
+        1. Key health insights
+        2. Risk indicators
+        3. Actionable recommendations
+
+        Keep it concise and structured.
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[
+                {"role": "system", "content": "You are a health intelligence AI."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+
+        ai_output = response.choices[0].message.content
+        st.info(ai_output)
+
+    except Exception as e:
+        st.error("AI service unavailable. Please check API key or try again.")
+        st.info("""
+        Sample Insight:
+        Your improving sleep consistency is positively impacting HRV, indicating better recovery.
+        Focus on cardiovascular activity to further improve heart health.
+        """)
+
+else:
+    st.info("Upload a report to generate insights.")
 
 # Risk Signals
 st.header("Risk Signals")
