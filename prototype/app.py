@@ -4,7 +4,9 @@ import pandas as pd
 st.set_page_config(page_title="Aevum Lifespan AI", layout="wide")
 
 st.title("Aevum Lifespan AI")
-st.subheader("Your Health Intelligence Dashboard")
+st.caption("The intelligence layer for human longevity")
+
+st.markdown("### Your health, decoded across biology, behavior, and time.")
 
 # Sidebar
 st.sidebar.header("User Profile")
